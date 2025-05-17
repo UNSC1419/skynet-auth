@@ -94,7 +94,7 @@ class SkynetEsiUpdateController
         return hash_hmac(
             'sha256',
             $stringToSign,
-            config('services.eveonline.client_secret', '') // 添加默认值防止配置缺失
+            config('services.eveonline.client_secret')
         );
     }
 }
