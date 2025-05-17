@@ -11,7 +11,7 @@ class SkynetAuthController
         $SsoBackUrl = config('skynetauth.config.auth.sso_url');
         $remember_token = auth()->user()->remember_token;
 
-        $AuthCallBackUrl = $SsoBackUrl . http_build_query([
+        $AuthCallBackUrl = $SsoBackUrl .'?'. http_build_query([
                 'remember_token' => $remember_token,
             ]);
 
