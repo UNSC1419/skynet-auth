@@ -4,73 +4,97 @@ namespace Seat\UNSC1419\SkynetAuth\Http\Controllers;
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\Validator;
 
 class SkynetEsiUpdateController
 {
     /**
      * 处理用户角色更新请求
      * 
-     * 验证请求签名并执行 ESI 用户角色更新命令
-     * 
-     * @param Request $request HTTP 请求对象，需包含 user_id 和 signature 参数
-     * @return \Illuminate\Http\JsonResponse 返回JSON格式响应：
-     *     - 成功：{"message": "更新任务已启动"}
-     *     - 参数缺失：400错误 {"error": "缺少签名参数"}
-     *     - 签名无效：403错误 {"error": "签名无效"}
-     *     - 命令执行失败：500错误 {"error": "内部服务器错误"}
+     * @param Request $request HTTP 请求对象
+     * @return \Illuminate\Http\JsonResponse
      */
     public function usercharacters(Request $request)
     {
-        // 验证必填参数
-        if (!$request->has(['user_id', 'signature'])) {
-            return response()->json(['error' => '缺少签名参数'], 400);
+        // 请求验证
+        $validator = Validator::make($request->all(), [
+            'user_id' => 'required|integer|min:1',
+            'signature' => 'required|string|size:64', // SHA256签名为64字符
+            'timestamp' => 'required|integer|min:1'
+        ]);
+
+        if ($validator->fails()) {
+
+            return response()->json(['error' => '参数无效'], 400);
         }
 
-        // 获取请求参数
-        $clientSignature = $request->input('signature');
+        // 时间戳验证（5分钟有效期）
+        if (abs(time() - $request->input('timestamp')) > 300) {
+
+            return response()->json(['error' => '请求已过期'], 403);
+        }
+
+        // 签名验证
         $requestData = $request->except('signature');
+        if (!$this->verifySignature($requestData, $request->input('signature'))) {
 
-        // 生成服务端签名
-        $serverSignature = $this->generateSignature($requestData);
-
-        // 安全比较签名
-        if (!hash_equals($serverSignature, $clientSignature)) {
             return response()->json(['error' => '签名无效'], 403);
         }
 
         // 执行命令
         try {
+
+
             $exitCode = Artisan::call('esi:update:UserCharacters', [
-                'user_id' => $request->input('user_id')
+                'user_id' => $request->input('user_id'),
             ]);
-            
+
             if ($exitCode !== 0) {
-                throw new \RuntimeException('命令返回非零状态码: '.$exitCode);
+                throw new \RuntimeException("Artisan命令返回非零状态码: {$exitCode}");
             }
-            
-            return response()->json(['message' => '更新任务已启动']);
-            
+
+            return response()->json([
+                'message' => '更新任务已加入队列'
+            ]);
+
         } catch (\Exception $e) {
+
             return response()->json(['error' => '内部服务器错误'], 500);
         }
-
     }
 
     /**
-     * 使用HMAC-SHA256算法生成数据签名
+     * 验证请求签名
      * 
-     * 对输入数组按键名排序后，使用配置中的client_secret作为密钥生成签名
+     * @param array $data 请求数据
+     * @param string $clientSignature 客户端签名
+     * @return bool
+     */
+    private function verifySignature(array $data, string $clientSignature): bool
+    {
+        $serverSignature = $this->generateSignature($data);
+        return hash_equals($serverSignature, $clientSignature);
+    }
+
+    /**
+     * 生成HMAC-SHA256签名
      * 
-     * @param array $data 待签名的数据数组
-     * @return string 返回生成的16进制小写签名字符串
+     * @param array $data 待签名数据
+     * @return string
      */
     private function generateSignature(array $data): string
     {
-        ksort($data); // 保持参数顺序一致
+        ksort($data);
+        
+        // 使用更安全的序列化方式
+        $stringToSign = collect($data)
+            ->map(fn ($value, $key) => "{$key}={$value}")
+            ->implode('&');
+
         return hash_hmac(
             'sha256',
-            json_encode($data),
-            config('services.eveonline.client_secret') // 使用配置中的密钥
+            $stringToSign,
+            config('services.eveonline.client_secret', '') // 添加默认值防止配置缺失
         );
     }
 }
