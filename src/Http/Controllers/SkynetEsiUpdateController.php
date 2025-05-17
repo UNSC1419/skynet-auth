@@ -20,7 +20,7 @@ class SkynetEsiUpdateController
         $validator = Validator::make($request->all(), [
             'user_id' => 'required|integer|min:1',
             'signature' => 'required|string|size:64', // SHA256签名为64字符
-            'timestamp' => 'required|integer|min:1'
+            'timestamp' => 'required|integer|min:1|max:2147483647' 
         ]);
 
         if ($validator->fails()) {
@@ -28,14 +28,21 @@ class SkynetEsiUpdateController
             return response()->json(['error' => '参数无效'], 400);
         }
 
+        $timestamp = (int)$request->input('timestamp');
+        $userId = (int)$request->input('user_id');
+        $requestData = [
+            'user_id' => $userId,
+            'timestamp' => $timestamp,
+        ];
+        
+
         // 时间戳验证（5分钟有效期）
-        if (abs(time() - $request->input('timestamp')) > 300) {
+        if (abs(time() - $timestamp) > 300) {
 
             return response()->json(['error' => '请求已过期'], 403);
         }
 
         // 签名验证
-        $requestData = $request->except('signature');
         if (!$this->verifySignature($requestData, $request->input('signature'))) {
 
             return response()->json(['error' => '签名无效'], 403);
@@ -46,7 +53,7 @@ class SkynetEsiUpdateController
 
 
             $exitCode = Artisan::call('esi:update:UserCharacters', [
-                'user_id' => $request->input('user_id'),
+                'user_id' => $userId,
             ]);
 
             if ($exitCode !== 0) {
@@ -84,6 +91,17 @@ class SkynetEsiUpdateController
      */
     private function generateSignature(array $data): string
     {
+
+        if (!is_array($data) || empty($data)) {
+            throw new \InvalidArgumentException('签名数据格式无效');
+        }
+
+        $secret = config('services.eveonline.client_secret');
+        if (empty($secret)) {
+            throw new \RuntimeException('未配置签名密钥');
+        }
+
+        // 这里使用ksort确保参数顺序一致
         ksort($data);
         
         // 使用更安全的序列化方式
@@ -94,7 +112,7 @@ class SkynetEsiUpdateController
         return hash_hmac(
             'sha256',
             $stringToSign,
-            config('services.eveonline.client_secret')
+            $secret
         );
     }
 }
