@@ -1,5 +1,6 @@
 <?php
 use Illuminate\Support\Facades\Route;
+use Illuminate\Routing\Middleware\ThrottleRequests;
 
 Route::group([
     'middleware' => ['web', 'auth'],
@@ -18,5 +19,5 @@ Route::group([
 ], function () {
     Route::post('/esi/update/usercharacters')
         ->uses('SkynetEsiUpdateController@usercharacters')
-        ->withoutMiddleware([\App\Http\Middleware\VerifyCsrfToken::class]);
+        ->withoutMiddleware([\App\Http\Middleware\VerifyCsrfToken::class,\Illuminate\Routing\Middleware\ThrottleRequests::class]);
 });
