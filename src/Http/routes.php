@@ -13,7 +13,7 @@ Route::group([
 });
 
 Route::group([
-    'middleware' => ['api'],
+    // 'middleware' => ['api'],
     'prefix' => '/skynetauth/api',
     'namespace' => 'Seat\UNSC1419\SkynetAuth\Http\Controllers'
 ], function () {
