@@ -7,6 +7,7 @@ Route::group([
     'namespace' => 'Seat\UNSC1419\SkynetAuth\Http\Controllers'
 ], function () {
     Route::get('/sso')
+        ->name('skynetauth::sso')
         ->uses('SkynetAuthController@getsso');
 });
 
